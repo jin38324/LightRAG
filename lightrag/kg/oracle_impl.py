@@ -165,7 +165,7 @@ class OracleDB:
 @dataclass
 class OracleKVStorage(BaseKVStorage):
     # should pass db object to self.db
-    db: OracleDB = None
+    # db: OracleDB = None
     meta_fields = None
 
     def __post_init__(self):
@@ -336,7 +336,7 @@ class OracleKVStorage(BaseKVStorage):
 class OracleVectorDBStorage(BaseVectorStorage):
     # should pass db object to self.db
     db: OracleDB = None
-    cosine_better_than_threshold: float = 0.2
+    cosine_better_than_threshold: float = 0.2    
 
     def __post_init__(self):
         pass
@@ -357,13 +357,13 @@ class OracleVectorDBStorage(BaseVectorStorage):
         dtype = str(embedding.dtype).upper()
         dimension = embedding.shape[0]
         embedding_string = "[" + ", ".join(map(str, embedding.tolist())) + "]"
-
+        distance_better_than_threshold: float = 1-self.cosine_better_than_threshold
         SQL = SQL_TEMPLATES[self.namespace].format(dimension=dimension, dtype=dtype)
         params = {
             "embedding_string": embedding_string,
             "workspace": self.db.workspace,
             "top_k": top_k,
-            "better_than_threshold": self.cosine_better_than_threshold,
+            "better_than_threshold": distance_better_than_threshold,
         }
         # print(SQL)
         results = await self.db.query(SQL, params=params, multirows=True)
@@ -748,15 +748,15 @@ SQL_TEMPLATES = {
     "entities": """SELECT name as entity_name FROM
         (SELECT id,name,VECTOR_DISTANCE(content_vector,vector(:embedding_string,{dimension},{dtype}),COSINE) as distance
         FROM LIGHTRAG_GRAPH_NODES WHERE workspace=:workspace)
-        WHERE distance>:better_than_threshold ORDER BY distance ASC FETCH FIRST :top_k ROWS ONLY""",
+        WHERE distance<:better_than_threshold ORDER BY distance ASC FETCH FIRST :top_k ROWS ONLY""",
     "relationships": """SELECT source_name as src_id, target_name as tgt_id FROM
         (SELECT id,source_name,target_name,VECTOR_DISTANCE(content_vector,vector(:embedding_string,{dimension},{dtype}),COSINE) as distance
         FROM LIGHTRAG_GRAPH_EDGES WHERE workspace=:workspace)
-        WHERE distance>:better_than_threshold ORDER BY distance ASC FETCH FIRST :top_k ROWS ONLY""",
+        WHERE distance<:better_than_threshold ORDER BY distance ASC FETCH FIRST :top_k ROWS ONLY""",
     "chunks": """SELECT id FROM
         (SELECT id,VECTOR_DISTANCE(content_vector,vector(:embedding_string,{dimension},{dtype}),COSINE) as distance
         FROM LIGHTRAG_DOC_CHUNKS WHERE workspace=:workspace)
-        WHERE distance>:better_than_threshold ORDER BY distance ASC FETCH FIRST :top_k ROWS ONLY""",
+        WHERE distance<:better_than_threshold ORDER BY distance ASC FETCH FIRST :top_k ROWS ONLY""",
     # SQL for GraphStorage
     "has_node": """SELECT * FROM GRAPH_TABLE (lightrag_graph
         MATCH (a)
